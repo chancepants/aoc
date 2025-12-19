@@ -1,8 +1,5 @@
 from __future__ import annotations
-import math
-from functools import cache
 import sys
-from typing import Callable
 import z3
 
 sys.setrecursionlimit(2000)
