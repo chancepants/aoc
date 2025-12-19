@@ -3,6 +3,7 @@ import math
 from functools import cache
 import sys
 from typing import Callable
+import z3
 
 sys.setrecursionlimit(2000)
 
@@ -26,13 +27,6 @@ class Machine:
 with open("day10.in", "r") as fin:
     LINES = [l.strip() for l in fin.readlines()]
     MACHINES = [Machine.from_line(line=line) for line in LINES]
-
-# mx = 0
-# for m in MACHINES:
-#     print(m.state, m.buttons, m.joltage)
-#     for v in m.joltage:
-#         mx = max(mx, v)
-# print(mx)
 
 def solver(mch: Machine) -> int:
     dp = {}
@@ -58,53 +52,29 @@ def p1():
         sm += res
     print(sm)
 
-
-def get_buttons(mch: Machine, c: tuple[int, ...], jolt: int) -> list[tuple[int, ...]]:
-    nonzero: Callable[[tuple[int, ...]], bool] =  lambda b: all(c[k] for k in b)
-    contains_jolt: Callable[[tuple[int, ...]], bool] = lambda b: jolt in b
-    return sorted(list(filter(lambda b: nonzero(b) and contains_jolt(b), mch.buttons)), key=lambda b: len(b), reverse=True)
-
-def smallest_jolt(c: tuple[int, ...]) -> tuple[int, int]:
-    mn = 100_000 
-    mni = -1
-    for i,x in enumerate(c):
-        if x and x < mn: 
-            mn = x
-            mni = i
-    return mni,mn 
-
-
-def jolt_solve(mch: Machine) -> int | float:
-    # filter out buttons that hit zero joltages
-    # pick the lowest value joltage
-    # pick the largest button set containing that lowest value joltage
-    # increase count by lowest val joltage and reduce all vals in button set
-    # loop
-    @cache
-    def solve(c: tuple[int, ...]) -> int | float:
-        if not any(x for x in c):
-            return 0
-        ret = math.inf
-        jolt, mn = smallest_jolt(c=c)
-        for b in get_buttons(mch=mch, c=c, jolt=jolt):
-            # create new jolt arr
-            nc = [x for x in c]
-            for k in b:
-                nc[k] -= mn
-            ret = min(ret, mn + solve(c=tuple(nc)))
-        return ret
-
-    return solve(mch.joltage)
-
-
 def p2():
-    sm = 0 
-    for i,mch in enumerate(MACHINES):
-        print(f"Go {i} {mch.joltage}")
-        res = jolt_solve(mch)
-        print(res)
-        sm += res
-    print(sm)
+    def solve(m: Machine) -> int:
+        presses = [z3.Int(str(i)) for i in range(len(m.buttons))]
+        opt = z3.Optimize()
+        for p in presses:
+            opt.add(p >= 0)
+        for i,c in enumerate(m.joltage):
+            constraints: list[z3.ArithRef] = []
+            for j, btn in enumerate(m.buttons):
+                if i in btn:
+                    constraints.append(presses[j])
+            opt.add(sum(constraints) == c)
+        opt.minimize(z3.Sum(presses))
+        if opt.check() == z3.sat:
+            model = opt.model()
+            return sum(model[p].as_long() for p in presses)
+        raise RuntimeError("Faile to satisfy") 
+
+    res = 0
+    for mch in MACHINES:
+        res += solve(mch)
+    print(res)
+
 
 # p1()
 p2()
